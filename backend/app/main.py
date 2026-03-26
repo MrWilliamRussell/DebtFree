@@ -7,7 +7,7 @@ from app.routes import (
     accounts, transactions, debts, budgets, dashboard, imports,
     nlp, forecast, subscriptions, health, scenarios, feedback, reports,
 )
-from app.routes import automation
+from app.routes import automation, overview
 from app.database import engine, Base
 
 
@@ -64,6 +64,9 @@ app.include_router(health.router, prefix="/api/health", tags=["Health Score"])
 app.include_router(scenarios.router, prefix="/api/scenarios", tags=["Scenarios"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["Feedback"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
+
+# System overview
+app.include_router(overview.router, prefix="/api/overview", tags=["Overview"])
 
 # Automation routes
 app.include_router(automation.router, prefix="/api/automation", tags=["Automation"])

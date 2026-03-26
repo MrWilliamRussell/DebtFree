@@ -13,7 +13,9 @@ import {
   Zap,
   FileText,
   RefreshCw,
+  Gauge,
 } from "lucide-react";
+import Overview from "./pages/Overview";
 import Dashboard from "./pages/Dashboard";
 import Debts from "./pages/Debts";
 import Transactions from "./pages/Transactions";
@@ -32,7 +34,8 @@ const navSections = [
   {
     label: "Core",
     items: [
-      { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+      { to: "/", icon: Gauge, label: "Overview" },
+      { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
       { to: "/accounts", icon: DollarSign, label: "Accounts" },
       { to: "/transactions", icon: ArrowDownUp, label: "Transactions" },
       { to: "/debts", icon: CreditCard, label: "Debts" },
@@ -91,7 +94,8 @@ export default function App() {
       {/* Main content */}
       <main className="flex-1 p-6 overflow-auto">
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<Overview />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/debts" element={<Debts />} />
