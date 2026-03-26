@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { importCSV, importAmazon, getAccounts, getConnectedAccounts, syncConnectedAccount, syncAllAccounts, getPlaidStatus } from "../api";
+import { importCSV, importAmazon, getAccounts, getConnectedAccounts, syncConnectedAccount, syncAllAccounts, getPlaidStatus, createPlaidLinkToken, exchangePlaidToken } from "../api";
 
 export default function Import() {
   const [accounts, setAccounts] = useState([]);
@@ -12,6 +12,8 @@ export default function Import() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(null);
+  const [syncResult, setSyncResult] = useState(null);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     getAccounts().then((r) => setAccounts(r.data));
@@ -36,20 +38,46 @@ export default function Import() {
 
   const handleSync = async (connId) => {
     setSyncing(connId);
+    setSyncResult(null);
     try {
-      await syncConnectedAccount(connId);
-      getConnectedAccounts().then((r) => setConnected(r.data));
-    } catch {}
+      const r = await syncConnectedAccount(connId);
+      setSyncResult({ id: connId, ...r.data });
+      getConnectedAccounts().then((r2) => setConnected(r2.data));
+    } catch (err) {
+      setSyncResult({ id: connId, error: err.response?.data?.detail || "Sync failed" });
+    }
     setSyncing(null);
   };
 
   const handleSyncAll = async () => {
     setSyncing("all");
+    setSyncResult(null);
     try {
-      await syncAllAccounts();
-      getConnectedAccounts().then((r) => setConnected(r.data));
-    } catch {}
+      const r = await syncAllAccounts();
+      setSyncResult({ id: "all", ...r.data });
+      getConnectedAccounts().then((r2) => setConnected(r2.data));
+    } catch (err) {
+      setSyncResult({ id: "all", error: err.response?.data?.detail || "Sync failed" });
+    }
     setSyncing(null);
+  };
+
+  const handleConnectBank = async () => {
+    setConnecting(true);
+    try {
+      const r = await createPlaidLinkToken();
+      const linkToken = r.data.link_token;
+      // Plaid Link is normally loaded via <script> tag. For now, show the token
+      // and instructions. In production, integrate the Plaid Link JS SDK.
+      setSyncResult({
+        id: "connect",
+        message: "Plaid Link token created. Integrate the Plaid Link SDK in production, or use sandbox testing.",
+        link_token: linkToken,
+      });
+    } catch (err) {
+      setSyncResult({ id: "connect", error: err.response?.data?.detail || "Failed to create link token" });
+    }
+    setConnecting(false);
   };
 
   const tabs = [
@@ -150,14 +178,41 @@ export default function Import() {
                   <h3 className="font-semibold">Connected Accounts</h3>
                   <div className="flex gap-2">
                     <button
+                      onClick={handleConnectBank}
+                      disabled={connecting}
+                      className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
+                    >
+                      {connecting ? "Connecting..." : "+ Connect Bank"}
+                    </button>
+                    <button
                       onClick={handleSyncAll}
                       disabled={syncing || connected.length === 0}
                       className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
                     >
-                      {syncing === "all" ? "Syncing..." : "Sync All"}
+                      {syncing === "all" ? "Syncing All..." : "Sync All"}
                     </button>
                   </div>
                 </div>
+
+                {/* Sync / connect result feedback */}
+                {syncResult && (
+                  <div className={`mb-4 p-4 rounded-lg ${syncResult.error ? "bg-red-900/30 border border-red-700" : "bg-emerald-900/30 border border-emerald-700"}`}>
+                    {syncResult.error ? (
+                      <p className="text-red-400">{syncResult.error}</p>
+                    ) : syncResult.imported !== undefined ? (
+                      <div className="text-emerald-400">
+                        <p>Synced {syncResult.imported} new transactions</p>
+                        {syncResult.llm_categorized > 0 && (
+                          <p className="text-sm text-gray-400">AI categorized: {syncResult.llm_categorized}</p>
+                        )}
+                      </div>
+                    ) : syncResult.message ? (
+                      <p className="text-emerald-400">{syncResult.message}</p>
+                    ) : (
+                      <p className="text-emerald-400">Sync complete</p>
+                    )}
+                  </div>
+                )}
 
                 {connected.length > 0 ? (
                   <div className="space-y-3">
@@ -175,19 +230,22 @@ export default function Import() {
                             <p className="text-xs text-gray-500">Last synced: {new Date(c.last_synced).toLocaleString()}</p>
                           )}
                           {c.error && <p className="text-xs text-red-400">{c.error}</p>}
+                          {syncResult && syncResult.id === c.id && !syncResult.error && (
+                            <p className="text-xs text-emerald-400 mt-1">Synced {syncResult.imported || 0} new transactions</p>
+                          )}
                         </div>
                         <button
                           onClick={() => handleSync(c.id)}
                           disabled={syncing === c.id}
                           className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg px-3 py-1.5 text-sm transition-colors"
                         >
-                          {syncing === c.id ? "..." : "Sync"}
+                          {syncing === c.id ? "Syncing..." : "Sync"}
                         </button>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-sm py-4">No accounts connected yet. Use the button above to link your bank.</p>
+                  <p className="text-gray-500 text-sm py-4">No accounts connected yet. Click "+ Connect Bank" above to link your bank.</p>
                 )}
               </div>
 
