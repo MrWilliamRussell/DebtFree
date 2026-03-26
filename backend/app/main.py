@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,12 +7,37 @@ from app.routes import (
     accounts, transactions, debts, budgets, dashboard, imports,
     nlp, forecast, subscriptions, health, scenarios, feedback, reports,
 )
+from app.routes import automation
 from app.database import engine, Base
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    from app.models import Account, Transaction, Debt, Budget, Income  # noqa: F401
+    from app.models.connected_account import ConnectedAccount  # noqa: F401
+    from app.services.feedback_loop import UserFeedback  # noqa: F401
+    from app.services.credential_vault import StoredCredential  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Start background scheduler
+    from app.services.scheduler import setup_scheduler
+    setup_scheduler()
+
+    yield
+
+    # Shutdown
+    from app.services.scheduler import scheduler
+    scheduler.shutdown(wait=False)
+
+
 app = FastAPI(
-    title="DebtFree - Income & Expenditure Tracker",
-    description="AI-powered personal finance dashboard for debt elimination",
-    version="0.2.0",
+    title="DebtFree - AI-Powered Debt Elimination Dashboard",
+    description="Self-hosted personal finance with automated bank sync, AI categorization, and debt payoff optimization",
+    version="0.3.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -38,18 +65,10 @@ app.include_router(scenarios.router, prefix="/api/scenarios", tags=["Scenarios"]
 app.include_router(feedback.router, prefix="/api/feedback", tags=["Feedback"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 
-
-@app.on_event("startup")
-async def startup():
-    # Import all models so they're registered with Base.metadata
-    from app.models import Account, Transaction, Debt, Budget, Income  # noqa: F401
-    from app.models.connected_account import ConnectedAccount  # noqa: F401
-    from app.services.feedback_loop import UserFeedback  # noqa: F401
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+# Automation routes
+app.include_router(automation.router, prefix="/api/automation", tags=["Automation"])
 
 
 @app.get("/api/ping")
 async def ping():
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.3.0"}

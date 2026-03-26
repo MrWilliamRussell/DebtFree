@@ -12,6 +12,7 @@ import {
   Heart,
   Zap,
   FileText,
+  RefreshCw,
 } from "lucide-react";
 import Dashboard from "./pages/Dashboard";
 import Debts from "./pages/Debts";
@@ -25,6 +26,7 @@ import Subscriptions from "./pages/Subscriptions";
 import HealthScore from "./pages/HealthScore";
 import Scenarios from "./pages/Scenarios";
 import Reports from "./pages/Reports";
+import Automation from "./pages/Automation";
 
 const navSections = [
   {
@@ -47,6 +49,7 @@ const navSections = [
       { to: "/health", icon: Heart, label: "Health Score" },
       { to: "/scenarios", icon: Zap, label: "Scenarios" },
       { to: "/reports", icon: FileText, label: "Reports" },
+      { to: "/automation", icon: RefreshCw, label: "Automation" },
     ],
   },
 ];
@@ -100,6 +103,7 @@ export default function App() {
           <Route path="/health" element={<HealthScore />} />
           <Route path="/scenarios" element={<Scenarios />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/automation" element={<Automation />} />
         </Routes>
       </main>
     </div>

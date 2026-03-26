@@ -40,6 +40,15 @@ matplotlib==3.9.3
 # Plaid (optional bank sync)
 plaid-python==26.0.0
 
+# Encryption (credential vault)
+cryptography==44.0.0
+
+# Scheduler (automated sync)
+apscheduler==3.10.4
+
+# Browser automation (Amazon scraper)
+playwright==1.49.1
+
 # Utilities
 python-dotenv==1.0.1
 pydantic==2.10.4

@@ -80,4 +80,13 @@ export const getFeedbackMetrics = () => api.get("/feedback/metrics");
 export const downloadReport = () =>
   api.get("/reports/monthly", { responseType: "blob" });
 
+// Automation
+export const getStoredCredentials = () => api.get("/automation/credentials");
+export const storeCredentials = (data) => api.post("/automation/credentials", data);
+export const deleteCredential = (id) => api.delete(`/automation/credentials/${id}`);
+export const testCredential = (id) => api.post(`/automation/credentials/${id}/test`);
+export const getSchedulerStatus = () => api.get("/automation/scheduler/status");
+export const triggerJob = (jobId) => api.post(`/automation/scheduler/trigger/${jobId}`);
+export const syncEverythingNow = () => api.post("/automation/sync-now");
+
 export default api;
