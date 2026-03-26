@@ -1,0 +1,33 @@
+# Environment
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker
+postgres_data/
+qdrant_data/
+
+# Backups (keep structure, ignore dumps)
+backups/*.sql
+backups/*.gz
+
+# OS
+.DS_Store
+Thumbs.db

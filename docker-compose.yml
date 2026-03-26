@@ -1,0 +1,113 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: finance_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-finance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finance_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-finance_db}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Qdrant Vector DB ──
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: finance_qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6340}:6333"
+      - "${QDRANT_GRPC_PORT:-6341}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # ── Ollama (Local LLM) ──
+  ollama:
+    image: ollama/ollama:latest
+    container_name: finance_ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ── FastAPI Backend ──
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: finance_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-finance}:${POSTGRES_PASSWORD:-finance_secret}@postgres:5432/${POSTGRES_DB:-finance_db}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6334
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
+      PLAID_SECRET: ${PLAID_SECRET:-}
+      PLAID_ENV: ${PLAID_ENV:-sandbox}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+    ports:
+      - "${BACKEND_PORT:-8088}:8000"
+    volumes:
+      - ./backend:/app
+      - model_cache:/root/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_started
+
+  # ── React Frontend ──
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: finance_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3088}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+  # ── Redis (caching alerts, rate limiting, coaching state) ──
+  redis:
+    image: redis:7-alpine
+    container_name: finance_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  ollama_data:
+  model_cache:
+  redis_data:

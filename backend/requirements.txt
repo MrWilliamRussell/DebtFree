@@ -1,0 +1,48 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.1
+
+# Redis
+redis[hiredis]==5.2.1
+
+# Qdrant vector DB
+qdrant-client==1.12.1
+sentence-transformers==3.3.1
+
+# LLM / RAG
+langchain==0.3.13
+langchain-community==0.3.13
+langchain-core==0.3.28
+ollama==0.4.4
+
+# Time-series forecasting
+chronos-forecasting==1.4.1
+torch>=2.0.0
+
+# Discord alerts
+aiohttp==3.11.11
+
+# CSV/data parsing
+pandas==2.2.3
+numpy>=1.26.0
+python-dateutil==2.9.0
+scipy>=1.12.0
+
+# PDF report generation
+reportlab==4.2.5
+matplotlib==3.9.3
+
+# Plaid (optional bank sync)
+plaid-python==26.0.0
+
+# Utilities
+python-dotenv==1.0.1
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.19
+jinja2==3.1.4
