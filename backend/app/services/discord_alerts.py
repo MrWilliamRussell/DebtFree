@@ -1,23 +1,48 @@
 """Discord webhook integration for budget alerts."""
 
 import aiohttp
-from datetime import date
+from datetime import date, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, extract
 
 from app.config import settings
 from app.models.transaction import Transaction, TransactionType
 from app.models.budget import Budget
+import logging
 
+logger = logging.getLogger(__name__)
 
 async def send_discord_alert(message: str):
-    """Send a message to the configured Discord webhook."""
+    """Send a message to the configured Discord webhook with retry and error handling."""
     if not settings.discord_webhook_url:
         return
 
     payload = {"content": message}
-    async with aiohttp.ClientSession() as session:
-        await session.post(settings.discord_webhook_url, json=payload)
+    retries = 3
+    backoff_time = 1  # seconds
+
+    for attempt in range(retries):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    settings.discord_webhook_url,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    if response.status == 204:
+                        return
+                    else:
+                        logger.error(f"Failed to send Discord alert. Status code: {response.status}")
+        except aiohttp.ClientError as e:
+            logger.error(f"Client error occurred while sending Discord alert: {e}")
+        except asyncio.TimeoutError:
+            logger.error("Timeout occurred while sending Discord alert")
+
+        if attempt < retries - 1:
+            await asyncio.sleep(backoff_time)
+            backoff_time *= 2
+
+    logger.error("Failed to send Discord alert after multiple attempts")
 
 
 async def check_budget_and_alert(db: AsyncSession, transaction: Transaction):

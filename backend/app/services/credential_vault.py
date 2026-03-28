@@ -45,6 +45,9 @@ class StoredCredential(Base):
 
 def _get_fernet() -> Fernet:
     """Derive a Fernet key from the app's SECRET_KEY."""
+    if settings.secret_key == "change-me-in-production":
+        raise ValueError("Default secret key is being used. Please change it in production.")
+    
     key_bytes = hashlib.sha256(settings.secret_key.encode()).digest()
     fernet_key = base64.urlsafe_b64encode(key_bytes)
     return Fernet(fernet_key)
@@ -80,8 +83,4 @@ def mask_credentials(data: dict) -> dict:
             parts = value.split("@")
             if len(parts) == 2:
                 masked[key] = parts[0][:2] + "****@" + parts[1]
-            else:
-                masked[key] = value[:3] + "****"
-        else:
-            masked[key] = value
     return masked

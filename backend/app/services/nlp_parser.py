@@ -1,12 +1,13 @@
-"""Natural language transaction parser using Ollama local LLM.
-
-Parses casual inputs like "Spent $45 on gas yesterday at Shell" into structured transactions.
-"""
-
 import json
 import re
 from datetime import date, timedelta
+from typing import Any, Dict
+
 from ollama import AsyncClient
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
+from sentence_transformers import SentenceTransformer
+from tenacity import retry, wait_exponential, stop_after_attempt, TimeoutError as RetryTimeoutError
 
 from app.config import settings
 
@@ -27,6 +28,7 @@ Input: "{input}"
 JSON:"""
 
 
+@retry(wait=wait_exponential(multiplier=1, min=2, max=30), stop=stop_after_attempt(5))
 async def parse_natural_language(text: str) -> dict:
     """Parse a natural language transaction description into structured data."""
     today = date.today()
@@ -42,6 +44,7 @@ async def parse_natural_language(text: str) -> dict:
         model=settings.ollama_model,
         messages=[{"role": "user", "content": prompt}],
         options={"temperature": 0.1},
+        timeout=10  # seconds
     )
 
     content = response["message"]["content"]
@@ -69,45 +72,65 @@ Reply with ONLY the category name, nothing else."""
         model=settings.ollama_model,
         messages=[{"role": "user", "content": prompt}],
         options={"temperature": 0.0},
+        timeout=10  # seconds
     )
 
     category = response["message"]["content"].strip().lower().replace(" ", "_")
-    valid = {
+    valid_categories = {
         "rent", "mortgage", "utilities", "groceries", "gas", "insurance", "medical",
         "dining", "entertainment", "shopping", "amazon", "subscriptions", "clothing",
-        "travel", "debt_payment", "savings", "investment", "income", "transfer", "other",
+        "travel", "debt_payment", "savings", "investment", "income", "transfer", "other"
     }
-    return category if category in valid else "other"
+    if category not in valid_categories:
+        raise ValueError(f"Invalid category: {category}")
+    return category
 
 
-async def generate_waste_score(transactions_summary: str) -> dict:
-    """Analyze spending patterns and score categories for waste potential."""
-    prompt = f"""You are a personal finance advisor. Analyze this monthly spending summary and score each discretionary category for "waste potential" (0-100, where 100 = highest waste).
+_client: QdrantClient | None = None
+_model: SentenceTransformer | None = None
 
-Spending summary:
-{transactions_summary}
 
-For each discretionary category, provide:
-- waste_score: 0-100
-- reason: one sentence why
-- suggestion: one actionable cut suggestion
-- monthly_savings_estimate: dollar amount that could reasonably be saved
+def get_qdrant_client() -> QdrantClient:
+    global _client
+    if _client is None:
+        _client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
+    return _client
 
-Return ONLY valid JSON as a list of objects. Example:
-[{{"category": "dining", "waste_score": 75, "reason": "Eating out 18 times exceeds typical needs", "suggestion": "Meal prep 3 days/week to cut dining by 40%", "monthly_savings_estimate": 180}}]
 
-JSON:"""
+def get_embedding_model() -> SentenceTransformer:
+    global _model
+    if _model is None:
+        _model = SentenceTransformer('all-MiniLM-L6-v2')
+    return _model
 
-    client = AsyncClient(host=settings.ollama_base_url)
-    response = await client.chat(
-        model=settings.ollama_model,
-        messages=[{"role": "user", "content": prompt}],
-        options={"temperature": 0.3},
+
+@retry(wait=wait_exponential(multiplier=1, min=2, max=30), stop=stop_after_attempt(5))
+def ensure_collection_exists():
+    client = get_qdrant_client()
+    collections = [c.name for c in client.get_collections().collections]
+    if settings.COLLECTION_NAME not in collections:
+        client.create_collection(
+            collection_name=settings.COLLECTION_NAME,
+            vectors_config=VectorParams(size=768, distance=Distance.COSINE),
+        )
+
+
+@retry(wait=wait_exponential(multiplier=1, min=2, max=30), stop=stop_after_attempt(5))
+def index_transaction(txn_id: int, description: str, merchant: str, category: str):
+    """Embed and store a transaction for semantic search."""
+    client = get_qdrant_client()
+    model = get_embedding_model()
+    text = f"{description} {merchant} {category}"
+    embedding = model.encode([text])[0].tolist()
+
+    point = PointStruct(
+        id=txn_id,
+        vector=embedding,
+        payload={
+            "description": description,
+            "merchant": merchant,
+            "category": category
+        }
     )
 
-    content = response["message"]["content"]
-    json_match = re.search(r'\[[\s\S]*\]', content)
-    if not json_match:
-        return []
-
-    return json.loads(json_match.group())
+    client.upsert(collection_name=settings.COLLECTION_NAME, points=[
